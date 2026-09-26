@@ -1,34 +1,35 @@
 """
 ============================================================
 NOVA — EXECUTIVE COPILOT
-UI DESIGN SYSTEM — V2
+UI DESIGN SYSTEM — V2.4
 ============================================================
 
-Stitch-inspired presentation layer for NOVA.
+Stitch-inspired executive presentation layer for NOVA.
 
-This module controls:
-    - Visual design
-    - UI components
-    - NOVA branding
-    - Epistemic status presentation
-    - Executive cards
-    - Signal cards
-    - Trust panels
-    - Scope presentation
+ARCHITECTURE BOUNDARY
+---------------------
+This module is PRESENTATION ONLY.
 
-This module does NOT control:
-    - Business calculations
-    - Dataset manipulation
-    - AI reasoning
-    - Validation logic
-    - Signal detection logic
+It does NOT:
+    - calculate business metrics
+    - manipulate source data
+    - perform AI reasoning
+    - validate business claims
+    - detect management signals
+    - modify the Trust Layer
 
 Core principle:
     EVIDENCE BEFORE INTERPRETATION
+
+Compatibility goal:
+    Preserve the public component interfaces used by app.py while
+    making the presentation layer tolerant of strings, lists, tuples,
+    dictionaries and optional keyword arguments.
 ============================================================
 """
 
 import html
+
 import streamlit as st
 
 
@@ -37,23 +38,23 @@ import streamlit as st
 # ============================================================
 
 COLORS = {
-    "bg": "#0B0F17",
-    "surface": "#0F131C",
-    "surface_2": "#141A24",
-    "surface_3": "#18202C",
-    "border": "#253044",
-    "border_soft": "#1B2433",
+    "bg": "#080C14",
+    "surface": "#0D121B",
+    "surface_2": "#111824",
+    "surface_3": "#172130",
+    "border": "#263244",
+    "border_soft": "#1A2534",
     "text": "#F8FAFC",
-    "text_muted": "#94A3B8",
-    "text_dim": "#64748B",
+    "text_muted": "#A7B3C5",
+    "text_dim": "#708096",
     "emerald": "#10B981",
-    "cyan": "#06B6D4",
-    "indigo": "#6366F1",
-    "purple": "#A855F7",
-    "amber": "#F59E0B",
-    "rose": "#F43F5E",
+    "cyan": "#22D3EE",
+    "indigo": "#818CF8",
+    "purple": "#C084FC",
+    "amber": "#FBBF24",
+    "rose": "#FB7185",
+    "red": "#F87171",
 }
-
 
 EPISTEMIC_COLORS = {
     "FACT": COLORS["cyan"],
@@ -68,19 +69,93 @@ EPISTEMIC_COLORS = {
     "NOT AVAILABLE": COLORS["amber"],
     "UNKNOWN": COLORS["amber"],
     "MODEL OUTPUT": COLORS["purple"],
+    "DATA INTEGRITY VERIFIED": COLORS["emerald"],
 }
 
 
+# ============================================================
+# SAFE / NORMALIZATION HELPERS
+# ============================================================
+
 def _safe(value):
-    """Escape dynamic text before inserting it into HTML."""
+    """Safely escape dynamic text before placing it inside HTML."""
     if value is None:
         return ""
-    return html.escape(str(value))
+    return html.escape(str(value), quote=True)
 
 
-def _render_html(content):
-    """Render controlled NOVA HTML through Streamlit."""
+def _normalize_items(value):
+    """
+    Normalize evidence values into a list without iterating over strings
+    character-by-character.
+
+    This fixes the historical:
+        ✓ S
+        ✓ O
+        ✓ U
+        ...
+    rendering bug when NOVA returned a plain string.
+    """
+    if value is None:
+        return []
+
+    if isinstance(value, str):
+        cleaned = value.strip()
+        return [cleaned] if cleaned else []
+
+    if isinstance(value, dict):
+        return [value]
+
+    if isinstance(value, (list, tuple, set)):
+        return list(value)
+
+    return [value]
+
+
+def _display_text(value):
+    """Convert common NOVA result structures into readable text."""
+    if value is None:
+        return ""
+
+    if isinstance(value, str):
+        return value.strip()
+
+    if isinstance(value, dict):
+        parts = []
+        for key, item in value.items():
+            if item in (None, ""):
+                continue
+            parts.append(f"{key}: {item}")
+        return "\n".join(parts)
+
+    if isinstance(value, (list, tuple, set)):
+        return "\n".join(f"• {item}" for item in value)
+
+    return str(value)
+
+
+def _status_color(status, fallback=None):
+    normalized = str(status or "").strip().upper()
+    return EPISTEMIC_COLORS.get(
+        normalized,
+        fallback or COLORS["text_dim"],
+    )
+
+
+def _render(content):
+    """Render controlled NOVA HTML using Streamlit's native HTML renderer."""
+    if content is None:
+        return
+
+    content = str(content).strip()
+    if not content:
+        return
+
     st.html(content)
+
+
+# Backward-compatible name used by earlier NOVA UI versions.
+_render_html = _render
 
 
 # ============================================================
@@ -88,14 +163,32 @@ def _render_html(content):
 # ============================================================
 
 def apply_nova_theme():
+    """
+    Apply the NOVA visual system.
+
+    The native Streamlit theme should be defined in:
+        .streamlit/config.toml
+
+    This function adds only presentation-level CSS for the executive UI.
+    """
+
     css = f"""
     <style>
+        /* -------------------------------------------------- */
+        /* GLOBAL CANVAS                                      */
+        /* -------------------------------------------------- */
+
         .stApp {{
             background:
                 radial-gradient(
-                    circle at 85% 5%,
-                    rgba(16, 185, 129, 0.055),
-                    transparent 28%
+                    circle at 88% 0%,
+                    rgba(34, 211, 238, 0.045),
+                    transparent 27%
+                ),
+                radial-gradient(
+                    circle at 10% 20%,
+                    rgba(16, 185, 129, 0.035),
+                    transparent 24%
                 ),
                 {COLORS["bg"]};
             color: {COLORS["text"]};
@@ -107,11 +200,12 @@ def apply_nova_theme():
 
         .block-container {{
             max-width: 1500px;
-            padding-top: 1.7rem;
+            padding-top: 1.25rem;
             padding-bottom: 4rem;
         }}
 
-        html, body, [class*="css"] {{
+        html, body,
+        [class*="css"] {{
             font-family:
                 Inter,
                 -apple-system,
@@ -129,6 +223,10 @@ def apply_nova_theme():
             color: {COLORS["text_muted"]};
         }}
 
+        /* -------------------------------------------------- */
+        /* SIDEBAR                                             */
+        /* -------------------------------------------------- */
+
         section[data-testid="stSidebar"] {{
             background: {COLORS["surface"]};
             border-right: 1px solid {COLORS["border_soft"]};
@@ -138,46 +236,175 @@ def apply_nova_theme():
             background: {COLORS["surface"]};
         }}
 
-        div[data-baseweb="select"] > div,
-        div[data-baseweb="input"] > div {{
-            background: {COLORS["surface_2"]};
-            border-color: {COLORS["border"]};
-            color: {COLORS["text"]};
+        /* -------------------------------------------------- */
+        /* NATIVE STREAMLIT INPUTS                             */
+        /* -------------------------------------------------- */
+
+        div[data-testid="stTextInput"] {{
+            width: 100% !important;
+            margin-bottom: 8px !important;
         }}
 
-        input {{
+        div[data-testid="stTextInput"] label {{
+            color: {COLORS["text_muted"]} !important;
+            font-size: 11px !important;
+            font-weight: 650 !important;
+            letter-spacing: 0.04em !important;
+        }}
+
+        div[data-testid="stTextInput"] > div {{
+            width: 100% !important;
+        }}
+
+        div[data-testid="stTextInput"] div[data-baseweb="base-input"],
+        div[data-testid="stTextInput"] div[data-baseweb="input"] {{
+            width: 100% !important;
+            min-height: 48px !important;
+            background: {COLORS["surface"]} !important;
+            border: 1px solid {COLORS["border"]} !important;
+            border-radius: 12px !important;
+            box-shadow: 0 8px 26px rgba(0,0,0,0.18) !important;
+        }}
+
+        div[data-testid="stTextInput"] div[data-baseweb="input"] > div {{
+            background: transparent !important;
+            border: none !important;
+            border-radius: 12px !important;
+        }}
+
+        div[data-testid="stTextInput"] input,
+        div[data-testid="stTextInput"] input[type="text"] {{
+            width: 100% !important;
+            min-height: 46px !important;
+            background: transparent !important;
+            color: {COLORS["text"]} !important;
+            -webkit-text-fill-color: {COLORS["text"]} !important;
+            caret-color: {COLORS["cyan"]} !important;
+            font-size: 14px !important;
+            font-weight: 500 !important;
+            border: none !important;
+            outline: none !important;
+            box-shadow: none !important;
+        }}
+
+        div[data-testid="stTextInput"] input::placeholder {{
+            color: {COLORS["text_dim"]} !important;
+            -webkit-text-fill-color: {COLORS["text_dim"]} !important;
+            opacity: 1 !important;
+        }}
+
+        div[data-testid="stTextInput"] div[data-baseweb="input"]:focus-within,
+        div[data-testid="stTextInput"] div[data-baseweb="base-input"]:focus-within {{
+            background: {COLORS["surface"]} !important;
+            border: 1px solid {COLORS["cyan"]} !important;
+            box-shadow:
+                0 0 0 1px rgba(34,211,238,0.13),
+                0 8px 28px rgba(0,0,0,0.20) !important;
+        }}
+
+        /* Broad fallback for Streamlit/BaseWeb input variants. */
+        div[data-baseweb="input"] input,
+        input[type="text"] {{
+            background: transparent !important;
+            color: {COLORS["text"]} !important;
+            -webkit-text-fill-color: {COLORS["text"]} !important;
+            caret-color: {COLORS["cyan"]} !important;
+        }}
+
+        input[type="text"]::placeholder {{
+            color: {COLORS["text_dim"]} !important;
+            -webkit-text-fill-color: {COLORS["text_dim"]} !important;
+            opacity: 1 !important;
+        }}
+
+        /* Select widgets */
+        div[data-baseweb="select"] > div {{
+            background: {COLORS["surface"]} !important;
+            border-color: {COLORS["border"]} !important;
+            color: {COLORS["text"]} !important;
+            border-radius: 8px !important;
+        }}
+
+        div[data-baseweb="select"] span,
+        div[data-baseweb="select"] input {{
             color: {COLORS["text"]} !important;
         }}
 
+        /* -------------------------------------------------- */
+        /* BUTTONS                                             */
+        /* -------------------------------------------------- */
+
         .stButton > button {{
-            background: {COLORS["surface_2"]};
-            color: {COLORS["text"]};
-            border: 1px solid {COLORS["border"]};
-            border-radius: 6px;
-            font-weight: 600;
-            transition: all 0.15s ease;
+            background: {COLORS["surface_2"]} !important;
+            color: {COLORS["text"]} !important;
+            border: 1px solid {COLORS["border"]} !important;
+            border-radius: 9px !important;
+            font-weight: 650 !important;
+            min-height: 42px !important;
+            padding: 0 16px !important;
+            transition: all 0.16s ease !important;
         }}
 
         .stButton > button:hover {{
-            border-color: {COLORS["emerald"]};
-            color: {COLORS["emerald"]};
+            border-color: {COLORS["cyan"]} !important;
+            color: {COLORS["cyan"]} !important;
+            background: {COLORS["surface_3"]} !important;
+        }}
+
+        .stButton > button:focus,
+        .stButton > button:focus-visible {{
+            outline: none !important;
+            box-shadow: 0 0 0 1px rgba(34,211,238,0.25) !important;
         }}
 
         .stButton > button[kind="primary"] {{
-            background: rgba(16, 185, 129, 0.12);
-            border-color: rgba(16, 185, 129, 0.42);
-            color: {COLORS["emerald"]};
+            background: rgba(34,211,238,0.08) !important;
+            border-color: rgba(34,211,238,0.34) !important;
+            color: {COLORS["cyan"]} !important;
+        }}
+
+        .stButton > button[kind="primary"]:hover {{
+            background: rgba(34,211,238,0.13) !important;
+            border-color: rgba(34,211,238,0.60) !important;
+        }}
+
+        /* -------------------------------------------------- */
+        /* TABS / DATAFRAME / DIVIDERS                         */
+        /* -------------------------------------------------- */
+
+        button[data-baseweb="tab"] {{
+            color: {COLORS["text_muted"]} !important;
+        }}
+
+        button[data-baseweb="tab"][aria-selected="true"] {{
+            color: {COLORS["cyan"]} !important;
         }}
 
         div[data-testid="stDataFrame"] {{
             border: 1px solid {COLORS["border"]};
-            border-radius: 8px;
+            border-radius: 9px;
             overflow: hidden;
         }}
 
         hr {{
-            border-color: {COLORS["border_soft"]};
+            border-color: {COLORS["border_soft"]} !important;
         }}
+
+        /* -------------------------------------------------- */
+        /* STREAMLIT CHROME                                    */
+        /* -------------------------------------------------- */
+
+        [data-testid="stHeader"] {{
+            background: transparent !important;
+        }}
+
+        [data-testid="stToolbar"] {{
+            background: transparent !important;
+        }}
+
+        /* -------------------------------------------------- */
+        /* SCROLLBAR                                           */
+        /* -------------------------------------------------- */
 
         ::-webkit-scrollbar {{
             width: 7px;
@@ -196,10 +423,21 @@ def apply_nova_theme():
         ::-webkit-scrollbar-thumb:hover {{
             background: {COLORS["text_dim"]};
         }}
+
+        /* -------------------------------------------------- */
+        /* RESPONSIVE HTML COMPONENTS                          */
+        /* -------------------------------------------------- */
+
+        @media (max-width: 850px) {{
+            .block-container {{
+                padding-left: 1rem;
+                padding-right: 1rem;
+            }}
+        }}
     </style>
     """
 
-    _render_html(css)
+    _render(css)
 
 
 # ============================================================
@@ -207,33 +445,33 @@ def apply_nova_theme():
 # ============================================================
 
 def render_brand():
-    _render_html(
+    _render(
         f"""
         <div style="
-            padding: 4px 0 18px 0;
-            border-bottom: 1px solid {COLORS["border_soft"]};
-            margin-bottom: 18px;
+            padding:4px 0 18px 0;
+            border-bottom:1px solid {COLORS["border_soft"]};
+            margin-bottom:18px;
         ">
             <div style="
-                font-size: 23px;
-                font-weight: 800;
-                letter-spacing: 0.10em;
-                color: {COLORS["text"]};
+                font-size:23px;
+                font-weight:800;
+                letter-spacing:0.10em;
+                color:{COLORS["text"]};
             ">NOVA</div>
 
             <div style="
-                font-size: 9px;
-                font-weight: 700;
-                letter-spacing: 0.16em;
-                color: {COLORS["emerald"]};
-                margin-top: 4px;
+                font-size:9px;
+                font-weight:750;
+                letter-spacing:0.16em;
+                color:{COLORS["cyan"]};
+                margin-top:4px;
             ">EXECUTIVE COPILOT</div>
 
             <div style="
-                font-size: 10px;
-                color: {COLORS["text_dim"]};
-                margin-top: 8px;
-                letter-spacing: 0.03em;
+                font-size:10px;
+                color:{COLORS["text_dim"]};
+                margin-top:8px;
+                letter-spacing:0.03em;
             ">Evidence Before Interpretation</div>
         </div>
         """
@@ -249,27 +487,22 @@ def command_bar(
     record_count=0,
     title=None,
     subtitle=None,
+    **kwargs,
 ):
-    """
-    Compatible with the NOVA app router.
-
-    active_view:
-        Current NOVA module.
-
-    record_count:
-        Number of records in the current scope.
-    """
-
+    """Render the executive workspace header."""
     if title is None:
         title = active_view
 
     if subtitle is None:
-        subtitle = (
-            f"Executive intelligence workspace • "
-            f"{int(record_count):,} records in scope"
-        )
+        try:
+            subtitle = (
+                "Executive intelligence workspace • "
+                f"{int(record_count):,} records in scope"
+            )
+        except (TypeError, ValueError):
+            subtitle = "Executive intelligence workspace"
 
-    _render_html(
+    _render(
         f"""
         <div style="
             display:flex;
@@ -282,12 +515,12 @@ def command_bar(
         ">
             <div>
                 <div style="
-                    font-size:11px;
-                    font-weight:700;
-                    color:{COLORS["emerald"]};
-                    letter-spacing:0.13em;
+                    font-size:10px;
+                    font-weight:750;
+                    color:{COLORS["cyan"]};
+                    letter-spacing:0.14em;
                     text-transform:uppercase;
-                    margin-bottom:6px;
+                    margin-bottom:7px;
                 ">NOVA / EXECUTIVE INTELLIGENCE</div>
 
                 <div style="
@@ -308,12 +541,12 @@ def command_bar(
             <div style="
                 padding:7px 11px;
                 border:1px solid rgba(16,185,129,0.25);
-                border-radius:6px;
-                background:rgba(16,185,129,0.06);
+                border-radius:7px;
+                background:rgba(16,185,129,0.055);
                 color:{COLORS["emerald"]};
-                font-size:9px;
+                font-size:8px;
                 font-weight:750;
-                letter-spacing:0.08em;
+                letter-spacing:0.09em;
                 white-space:nowrap;
             ">DATA INTEGRITY VERIFIED</div>
         </div>
@@ -325,14 +558,11 @@ def command_bar(
 # SECTION HEADER
 # ============================================================
 
-def section_header(title, subtitle=None, status=None):
+def section_header(title, subtitle=None, status=None, **kwargs):
     status_html = ""
 
     if status:
-        status_color = EPISTEMIC_COLORS.get(
-            str(status).upper(),
-            COLORS["emerald"],
-        )
+        status_color = _status_color(status, COLORS["emerald"])
         status_html = f"""
         <span style="
             margin-left:10px;
@@ -341,14 +571,13 @@ def section_header(title, subtitle=None, status=None):
             background:{status_color}12;
             border:1px solid {status_color}55;
             color:{status_color};
-            font-size:9px;
+            font-size:8px;
             font-weight:750;
             letter-spacing:0.07em;
         ">{_safe(status)}</span>
         """
 
     subtitle_html = ""
-
     if subtitle:
         subtitle_html = f"""
         <div style="
@@ -359,13 +588,14 @@ def section_header(title, subtitle=None, status=None):
         ">{_safe(subtitle)}</div>
         """
 
-    _render_html(
+    _render(
         f"""
         <div style="margin:10px 0 18px 0;">
             <div style="
                 display:flex;
                 align-items:center;
                 gap:4px;
+                flex-wrap:wrap;
                 font-size:19px;
                 font-weight:750;
                 color:{COLORS["text"]};
@@ -384,12 +614,9 @@ def section_header(title, subtitle=None, status=None):
 # EPISTEMIC BADGE
 # ============================================================
 
-def epistemic_badge(level, label=None):
-    normalized = str(level).strip().upper()
-    color = EPISTEMIC_COLORS.get(
-        normalized,
-        COLORS["text_dim"],
-    )
+def epistemic_badge(level, label=None, **kwargs):
+    normalized = str(level or "UNKNOWN").strip().upper()
+    color = _status_color(normalized)
 
     label_html = ""
     if label:
@@ -398,23 +625,39 @@ def epistemic_badge(level, label=None):
             margin-left:8px;
             color:{COLORS["text_dim"]};
             font-size:9px;
+            font-weight:500;
+            letter-spacing:0;
         ">{_safe(label)}</span>
         """
 
-    _render_html(
+    _render(
         f"""
-        <span style="
-            display:inline-block;
-            padding:4px 9px;
-            border-radius:5px;
-            border:1px solid {color}55;
-            background:{color}12;
-            color:{color};
-            font-size:9px;
-            font-weight:750;
-            letter-spacing:0.075em;
-            white-space:nowrap;
-        ">{_safe(normalized)}{label_html}</span>
+        <div style="margin:2px 0 8px 0;">
+            <span style="
+                display:inline-flex;
+                align-items:center;
+                padding:5px 9px;
+                border-radius:999px;
+                border:1px solid {color}55;
+                background:{color}12;
+                color:{color};
+                font-size:8px;
+                font-weight:750;
+                letter-spacing:0.075em;
+                white-space:nowrap;
+            ">
+                <span style="
+                    display:inline-block;
+                    width:5px;
+                    height:5px;
+                    border-radius:50%;
+                    background:{color};
+                    margin-right:6px;
+                "></span>
+                {_safe(normalized)}
+                {label_html}
+            </span>
+        </div>
         """
     )
 
@@ -429,11 +672,9 @@ def kpi_card(
     caption=None,
     status="FACT",
     delta=None,
+    **kwargs,
 ):
-    status_color = EPISTEMIC_COLORS.get(
-        str(status).upper(),
-        COLORS["emerald"],
-    )
+    status_color = _status_color(status, COLORS["emerald"])
 
     caption_html = ""
     if caption:
@@ -447,7 +688,7 @@ def kpi_card(
         """
 
     delta_html = ""
-    if delta:
+    if delta not in (None, ""):
         delta_html = f"""
         <div style="
             margin-top:7px;
@@ -456,7 +697,7 @@ def kpi_card(
         ">{_safe(delta)}</div>
         """
 
-    _render_html(
+    _render(
         f"""
         <div style="
             background:linear-gradient(
@@ -465,7 +706,7 @@ def kpi_card(
                 {COLORS["surface"]}
             );
             border:1px solid {COLORS["border"]};
-            border-radius:8px;
+            border-radius:10px;
             padding:17px 18px;
             min-height:122px;
             box-sizing:border-box;
@@ -517,19 +758,14 @@ def signal_card(
     status="VALIDATED PATTERN",
     implication=None,
     level=None,
+    **kwargs,
 ):
-    """
-    Compatible with both current and future NOVA signal calls.
-    """
-
+    """Render a management signal without changing signal logic."""
     if level is not None:
         status = level
 
-    normalized = str(status).strip().upper()
-    color = EPISTEMIC_COLORS.get(
-        normalized,
-        COLORS["text_dim"],
-    )
+    normalized = str(status or "VALIDATED PATTERN").strip().upper()
+    color = _status_color(normalized)
 
     metric_html = ""
     if metric not in (None, ""):
@@ -548,7 +784,7 @@ def signal_card(
         """
 
     implication_html = ""
-    if implication:
+    if implication not in (None, ""):
         implication_html = f"""
         <div style="
             margin-top:13px;
@@ -565,13 +801,13 @@ def signal_card(
         </div>
         """
 
-    _render_html(
+    _render(
         f"""
         <div style="
             background:{COLORS["surface"]};
             border:1px solid {COLORS["border"]};
             border-left:3px solid {color};
-            border-radius:7px;
+            border-radius:9px;
             padding:16px 18px;
             margin-bottom:12px;
         ">
@@ -611,15 +847,46 @@ def signal_card(
 
 def trust_panel(
     title,
-    message,
+    message=None,
     status="DATA INTEGRITY VERIFIED",
+    body=None,
+    content=None,
+    **kwargs,
 ):
-    _render_html(
+    """
+    Flexible trust panel compatible with all known NOVA call styles.
+
+    Supported examples:
+        trust_panel(title="Data Integrity Verified", message="...")
+        trust_panel(title="NOVA Trust Boundary", body="...")
+        trust_panel(title="...", content="...")
+        trust_panel(title="...")
+    """
+    if message is None:
+        message = body
+
+    if message is None:
+        message = content
+
+    if message is None:
+        message = kwargs.get("text", "")
+
+    if message is None:
+        message = ""
+
+    normalized_status = str(status or "DATA INTEGRITY VERIFIED").strip().upper()
+    status_color = _status_color(normalized_status, COLORS["emerald"])
+
+    _render(
         f"""
         <div style="
-            background:rgba(16,185,129,0.045);
+            background:linear-gradient(
+                135deg,
+                rgba(16,185,129,0.055),
+                rgba(34,211,238,0.025)
+            );
             border:1px solid rgba(16,185,129,0.22);
-            border-radius:8px;
+            border-radius:9px;
             padding:16px 18px;
             margin:10px 0 18px 0;
         ">
@@ -636,19 +903,20 @@ def trust_panel(
                 ">{_safe(title)}</div>
 
                 <div style="
-                    color:{COLORS["emerald"]};
+                    color:{status_color};
                     font-size:8px;
                     font-weight:750;
                     letter-spacing:0.09em;
                     white-space:nowrap;
-                ">{_safe(status)}</div>
+                ">{_safe(normalized_status)}</div>
             </div>
 
             <div style="
                 color:{COLORS["text_muted"]};
                 font-size:10px;
-                line-height:1.6;
+                line-height:1.65;
                 margin-top:8px;
+                white-space:pre-line;
             ">{_safe(message)}</div>
         </div>
         """
@@ -668,38 +936,22 @@ def scope_bar(
     transactions=None,
     date_range="Dataset period",
     filters=None,
+    **kwargs,
 ):
-    """
-    Displays the current analytical scope.
-
-    Supports the app.py call:
-        scope_bar(
-            product=...,
-            region=...,
-            channel=...,
-            segment=...,
-            records=...,
-            date_range=...,
-            filters=...,
-        )
-    """
-
+    """Display the current analytical scope."""
     if transactions is not None:
         records = transactions
 
     if filters is None:
         active_filters = []
-
-        for label, value in [
+        for label, value in (
             ("Product", product),
             ("Region", region),
             ("Channel", channel),
             ("Segment", segment),
-        ]:
+        ):
             if value not in (None, "", "All"):
-                active_filters.append(
-                    f"{label}: {value}"
-                )
+                active_filters.append(f"{label}: {value}")
 
         filters = (
             "All available records"
@@ -707,16 +959,22 @@ def scope_bar(
             else " • ".join(active_filters)
         )
 
-    _render_html(
+    try:
+        record_text = f"{int(records):,}"
+    except (TypeError, ValueError):
+        record_text = _safe(records)
+
+    _render(
         f"""
         <div style="
             display:flex;
             justify-content:space-between;
             align-items:center;
             gap:15px;
+            flex-wrap:wrap;
             background:{COLORS["surface"]};
             border:1px solid {COLORS["border_soft"]};
-            border-radius:6px;
+            border-radius:8px;
             padding:9px 12px;
             margin-bottom:18px;
         ">
@@ -727,7 +985,7 @@ def scope_bar(
                 <strong style="color:{COLORS["text"]};">
                     SCOPE
                 </strong>
-                &nbsp; {_safe(int(records))} transactions
+                &nbsp; {_safe(record_text)} transactions
             </div>
 
             <div style="
@@ -749,81 +1007,107 @@ def scope_bar(
 # ============================================================
 
 def knowledge_panel(
-    title,
+    title=None,
     body=None,
     status="FACT",
     known=None,
     unknown=None,
+    **kwargs,
 ):
     """
-    Flexible evidence panel.
+    Flexible evidence component.
 
-    Primary NOVA usage:
-        knowledge_panel(title, body, status)
+    Supports the current app.py styles:
+        knowledge_panel("Empirical Evidence", text, "SOURCE DATA")
 
-    Legacy-compatible usage:
+    And the two-column knowledge view:
         knowledge_panel(known=[...], unknown=[...])
+
+    Strings are always treated as ONE item, never as a character iterable.
     """
+    # Allow callers to use content/message instead of body.
+    if body is None:
+        body = kwargs.get("content", kwargs.get("message"))
 
+    # Two-column knowledge view.
     if known is not None or unknown is not None:
-        known_items = known or []
-        unknown_items = unknown or []
+        known_items = _normalize_items(known)
+        unknown_items = _normalize_items(unknown)
 
-        known_html = "".join(
-            f"""
-            <div style="
-                margin-top:7px;
-                color:{COLORS["text_muted"]};
-                font-size:10px;
-                line-height:1.5;
-            ">
-                <span style="
-                    color:{COLORS["emerald"]};
-                    font-weight:800;
-                ">✓</span>
-                &nbsp; {_safe(item)}
-            </div>
-            """
-            for item in known_items
-        )
+        known_rows = []
+        for item in known_items:
+            known_rows.append(
+                f"""
+                <div style="
+                    padding:9px 0;
+                    color:{COLORS["text_muted"]};
+                    font-size:10px;
+                    line-height:1.55;
+                    border-bottom:1px solid {COLORS["border_soft"]};
+                ">
+                    <span style="
+                        color:{COLORS["emerald"]};
+                        font-weight:850;
+                    ">✓</span>
+                    &nbsp; {_safe(item)}
+                </div>
+                """
+            )
 
-        unknown_html = "".join(
-            f"""
-            <div style="
-                margin-top:7px;
-                color:{COLORS["text_muted"]};
-                font-size:10px;
-                line-height:1.5;
-            ">
-                <span style="
-                    color:{COLORS["amber"]};
-                    font-weight:800;
-                ">?</span>
-                &nbsp; {_safe(item)}
-            </div>
-            """
-            for item in unknown_items
-        )
+        unknown_rows = []
+        for item in unknown_items:
+            unknown_rows.append(
+                f"""
+                <div style="
+                    padding:9px 0;
+                    color:{COLORS["text_muted"]};
+                    font-size:10px;
+                    line-height:1.55;
+                    border-bottom:1px solid {COLORS["border_soft"]};
+                ">
+                    <span style="
+                        color:{COLORS["amber"]};
+                        font-weight:850;
+                   ">?</span>
+                    &nbsp; {_safe(item)}
+                </div>
+                """
+            )
 
-        _render_html(
+        known_html = "".join(known_rows)
+        unknown_html = "".join(unknown_rows)
+
+        if not known_html:
+            known_html = (
+                f'<div style="color:{COLORS["text_dim"]};font-size:10px;'
+                'padding-top:12px;">No explicit evidence items supplied.</div>'
+            )
+
+        if not unknown_html:
+            unknown_html = (
+                f'<div style="color:{COLORS["text_dim"]};font-size:10px;'
+                'padding-top:12px;">No explicit unknowns supplied.</div>'
+            )
+
+        _render(
             f"""
             <div style="
                 display:grid;
                 grid-template-columns:repeat(2,minmax(0,1fr));
-                gap:12px;
+                gap:14px;
                 margin:14px 0;
             ">
                 <div style="
                     background:{COLORS["surface"]};
                     border:1px solid {COLORS["border"]};
-                    border-radius:7px;
-                    padding:15px;
+                    border-radius:9px;
+                    padding:15px 17px;
                 ">
                     <div style="
                         color:{COLORS["emerald"]};
                         font-size:9px;
-                        font-weight:750;
-                        letter-spacing:0.09em;
+                        font-weight:800;
+                        letter-spacing:0.10em;
                     ">WHAT NOVA KNOWS</div>
                     {known_html}
                 </div>
@@ -831,14 +1115,14 @@ def knowledge_panel(
                 <div style="
                     background:{COLORS["surface"]};
                     border:1px solid {COLORS["border"]};
-                    border-radius:7px;
-                    padding:15px;
+                    border-radius:9px;
+                    padding:15px 17px;
                 ">
                     <div style="
                         color:{COLORS["amber"]};
                         font-size:9px;
-                        font-weight:750;
-                        letter-spacing:0.09em;
+                        font-weight:800;
+                        letter-spacing:0.10em;
                     ">WHAT NOVA DOES NOT KNOW</div>
                     {unknown_html}
                 </div>
@@ -847,25 +1131,29 @@ def knowledge_panel(
         )
         return
 
-    if isinstance(body, (list, tuple)):
-        body_text = "<br>".join(
-            f"• {_safe(item)}" for item in body
+    if title is None:
+        title = "Evidence"
+
+    normalized = str(status or "FACT").strip().upper()
+    color = _status_color(normalized)
+
+    # Render list-like bodies as separate evidence rows.
+    body_items = _normalize_items(body)
+    if isinstance(body, (list, tuple, set)):
+        body_html = "<br>".join(
+            f"• {_safe(item)}" for item in body_items
         )
+    elif isinstance(body, dict):
+        body_html = _safe(_display_text(body))
     else:
-        body_text = _safe(body)
+        body_html = _safe(body)
 
-    normalized = str(status).strip().upper()
-    color = EPISTEMIC_COLORS.get(
-        normalized,
-        COLORS["text_dim"],
-    )
-
-    _render_html(
+    _render(
         f"""
         <div style="
             background:{COLORS["surface"]};
             border:1px solid {COLORS["border"]};
-            border-radius:7px;
+            border-radius:9px;
             padding:15px 17px;
             margin:12px 0;
         ">
@@ -874,6 +1162,7 @@ def knowledge_panel(
                 justify-content:space-between;
                 align-items:center;
                 gap:12px;
+                flex-wrap:wrap;
             ">
                 <div style="
                     color:{COLORS["text"]};
@@ -893,9 +1182,10 @@ def knowledge_panel(
             <div style="
                 color:{COLORS["text_muted"]};
                 font-size:10px;
-                line-height:1.65;
+                line-height:1.7;
                 margin-top:9px;
-            ">{body_text}</div>
+                white-space:pre-line;
+            ">{body_html}</div>
         </div>
         """
     )
@@ -906,7 +1196,7 @@ def knowledge_panel(
 # ============================================================
 
 def nova_footer():
-    _render_html(
+    _render(
         f"""
         <div style="
             margin-top:45px;
